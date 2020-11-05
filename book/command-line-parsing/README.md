@@ -417,6 +417,47 @@ For usage information, run
 [1]
 ```
 
+One downside of the above approach is that we've lost some of the
+benefits of `Filename.arg_type`, in particular, its support for
+autocomplete.  Wen can preserve this by instead using `Arg_type.map`
+to add the extra check for a regular file, without losing the
+autocompletion support.
+
+```ocaml file=examples/correct/md5_with_better_custom_arg/md5.ml,part=1
+let regular_file =
+  Command.Arg_type.map Filename.arg_type ~f:(fun filename ->
+      match Sys.is_file filename with
+      | `Yes -> filename
+      | `No -> failwith "Not a regular file"
+      | `Unknown -> failwith "Could not determine if this was a regular file")
+```
+
+(BUT! The following shows a result that's different in terms of the
+error message.  We no longer get):
+
+```
+failed to parse FILENAME value "/dev/null"
+```
+
+Why?
+
+
+```sh dir=examples/correct/md5_with_better_custom_arg
+$ dune exec -- ./md5.exe md5.ml
+12545f2cf40cf5c68a53198963831e70
+$ dune exec -- ./md5.exe /dev/null
+Error parsing command line:
+
+  (Failure "Not a regular file")
+
+For usage information, run
+
+  md5.exe -help
+
+[1]
+```
+
+
 ### Optional and Default Arguments
 
 A more realistic `md5` binary could also read from the standard input if a
