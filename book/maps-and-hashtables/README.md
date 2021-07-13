@@ -642,6 +642,68 @@ you can always write your own comparison function by hand; but if all you
 need is a total order suitable for creating maps and sets with, then
 `[@@deriving compare]` is a good choice.
 
+If you use Core rather than Base, things are a bit different. Either `Comparator.Make` 
+or `Comparable.Make` requires `t_of_sexp` for the generated serialization modules. 
+We need to change the deriving from `sexp_of` to `sexp`.
+
+```ocaml env=core_compare
+# #require "ppx_jane"
+# open Core
+# module Book = struct
+    module T = struct
+      type t = { title: string; isbn: string }
+      [@@deriving compare, sexp]
+    end
+    include T
+    include Comparator.Make(T)
+  end
+module Book :
+  sig
+    module T :
+      sig
+        type t = { title : string; isbn : string; }
+        val compare : t -> t -> int
+        val t_of_sexp : Sexplib0.Sexp.t -> t
+        val sexp_of_t : t -> Sexp.t
+      end
+    type t = T.t = { title : string; isbn : string; }
+    val compare : t -> t -> int
+    val t_of_sexp : Sexp.t -> t
+    val sexp_of_t : t -> Sexp.t
+    type comparator_witness = Base.Comparator.Make(T).comparator_witness
+    val comparator : (t, comparator_witness) Comparator.t
+  end
+```
+
+`Core.Comparable` generates inner modules `Map` and `Set` for serialization. When you open this module locally, the `Core.Set` will be shadowed by 
+`Book.Set` silently. 
+
+```ocaml file=examples/correct/core_comparable.ml
+open Core
+
+module Book = struct
+  module T = struct
+    type t = { title: string; isbn: string }
+    [@@deriving compare, sexp]
+  end
+  include T
+  include Comparable.Make(T)
+end
+
+let title_set = Set.empty (module String)
+
+let add_title title_set (book : Book.t) =
+  let open Book in
+  Set.add title_set book.title
+
+(* 
+Error: This expression has type string but an expression was expected of type t
+ *)
+```
+
+The error message shows `Set.add` expects an expression of type `t`(`Book.t`) 
+and we cannot use it on other sets since it's `Book.Set` rather than `Core.Set`.
+
 ::: {data-type=note}
 ##### =, ==, and phys_equal
 
